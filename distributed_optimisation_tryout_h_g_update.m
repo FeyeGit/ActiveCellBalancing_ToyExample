@@ -18,7 +18,7 @@ A = A_old; B = B_old; D = D_old;
 
 %% Faulty parameters
 % load Profile_adapted_2
-% load SS_LPV
+% load SS_LPV %test
 % load RC_1st_ARX_smooth_4
 % load curve_t2_smooth
 % load variations
