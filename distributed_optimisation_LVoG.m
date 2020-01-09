@@ -519,6 +519,8 @@ for ip=1:ending
     end
 end
 
+options=cplexoptimset('Display','off','TolFun',1e-8,'TolRLPFun',1e-8,'TolXInteger',1e-8);
+
 x_min = 0;
 C0_varied = C0*C0_var;
 gamma_reg_values = [0];
@@ -527,7 +529,16 @@ gain=[1;1;1];
 gamma_lambda = 5e-1;
 gamma_mu = 5e-4;
 gamma_nu = 5e-4;
-figure;hold on
+
+ce = 0.9;
+rho = 0.05;
+betaa = 1.001;
+xsi = 0.99;
+
+gamma_p = 1;
+gamma_d = 5e-4;
+
+figure;hold on;grid;
 tic
 for iter = 1:maxIter
     disp(['Iteration ',num2str(iter)])
@@ -535,10 +546,6 @@ for iter = 1:maxIter
     x_temp = x;    
     
     for n=1:N
-        OK=0;
-        in_cyc = 0;
-        while OK==0
-        in_cyc = in_cyc+1;    
         x_min = 0;
         
         %% construct matrices
@@ -555,33 +562,16 @@ for iter = 1:maxIter
                 -2*x_temp(2*n-1,1:ending).*gamma_reg*gamma(1:2:end,:));
         
         y_matrix(n,:) = -Aineq(1:ending,1:2*ending)*u_opt(:,n) + Cm*(phi*x0) + beta0(n,:)' + Xiu';
-        x_matrix_test_first(:,n) = gamma(1:2:end,:)*u_opt(:,n)+phi(1:2:end,:)*x0;
-%         x_matrix_test_3(:,n) = gamma(2:2:end,2:3:end)*u_opt(:,n)+phi(2:2:end,:)*x0+Xiu';    
-%%        
-        
-%         figure;hold on;
-%         plot(y_matrix(n,:))
-%         plot(y(n,:))
-% %         
-%         figure;hold on;
-%         plot(x_matrix_test_first(:,n))
-%         plot(x_temp(2*n-1,1:ending))
-%         
-%         figure;hold on;
-%         plot(x_matrix_test(:,n))
-%         plot(x_temp(2*n,1:ending))
-%         
-%         pause
-          
+        x_matrix_test_first(:,n) = gamma(1:2:end,:)*u_opt(:,n)+phi(1:2:end,:)*x0;    
+
         %% Optimization
-        if iter>1 && mean(Merit_end)>0
-%             [u_opt(:,n),fval,exitflag,output] = quadprog((H+H')/2+(0.2*eye(size((H+H')/2,1))),F',[Aineq],[bineq],[],[],lb,ub,[],options);      %
-             [u_opt(:,n),fval,exitflag,output] = quadprog((H+H')/2+diag(repmat([0 0.5],1,ending)),F',[Aineq],[bineq],[],[],lb,ub,[],options);      %
+        if iter>1
+             [u_opt(:,n),fval,exitflag,output] = cplexqp(1*(H+H')/2+diag(repmat([1-1 1-1],1,ending)),F',[Aineq],[bineq],[],[],lb,ub,[],options);      %
         elseif iter==1
-            [u_opt(:,n),fval,exitflag,output] = quadprog((H+H')/2+0*eye(size((H+H')/2,1)),F',[Aineq],[bineq],[],[],lb,ub,[],options);      %
-        elseif mean(Merit_end)<0
-            [u_opt(:,n),fval,exitflag,output] = quadprog((H+H')/2+0*eye(size((H+H')/2,1)),F',[Aineq],[bineq],[],[],lb,ub,[],options);      %
+            [u_opt(:,n),fval,exitflag,output] = cplexqp((H+H')/2+0*eye(size((H+H')/2,1)),F',[Aineq],[bineq],[],[],lb,ub,[],options);      %
         end
+        
+        u_opt(:,n) = U0(:,n) + gamma_p*(u_opt(:,n)-U0(:,n));
             
         if n==1
             x = x0;
@@ -600,46 +590,10 @@ for iter = 1:maxIter
         
         y_matrix(n,:) = -Aineq(1:ending,1:2*ending)*u_opt(:,n) + Cm*(phi*x0) + beta0(n,:)'+Xiu';
         x_matrix_test_first(:,n) = gamma(1:2:end,:)*u_opt(:,n)+phi(1:2:end,:)*x0;
-        x_matrix_test(:,n) = gamma(2:2:end,:)*u_opt(:,n)+phi(2:2:end,:)*x0;  
-        
-%         figure;hold on;
-%         plot(y_matrix(n,:))
-%         plot(y(n,:))
-
-%         figure;hold on;
-%         plot(x_matrix_test_first(:,n))
-%         plot(x(2*n-1,1:ending))
-%         
-%         figure;hold on;
-%         plot(x_matrix_test(:,n))
-%         plot(x(2*n,1:ending))
-%         
-%         pause
+        x_matrix_test(:,n) = gamma(2:2:end,:)*u_opt(:,n)+phi(2:2:end,:)*x0;
         
         %% Linearisation
         for k=1:ending
-%             for i=1:numel(range)
-%                 x_min = x(2*n-1,k)+range(i);
-% 
-%                 Y(i) = EMF(x_min)+D(x_min)*D_var(n)*(u_opt(2*k-1,n)+u_opt(2*k,n))-D(x(2*n-1,k))*D_var(n)*(u_opt(2*k-1,n)+u_opt(2*k,n));  
-%                 
-%                 Af = A(x_min)^AB_var(n);
-%                 Bf = B(x_min)*AB_var(n);
-%                 x_perfect(i) = Af*x(2*n,k) + Bf*(u_opt(2*k-1,n)+u_opt(2*k,n));
-% 
-%                 Af = A(x(2*n-1,k))^AB_var(n);
-%                 Bf = B(x(2*n-1,k))*AB_var(n);
-%                 Y_X(i) = x_perfect(i)-(Af*x(2*n,k) + Bf*(u_opt(2*k-1,n)+u_opt(2*k,n)));
-%             end
-%             X = x(2*n-1,k)+range;
-%             gradY = (Y(3)-Y(1))/(sum(diff(range)));
-%             beta0(n,k) = -gradY*x(2*n-1,k)+Y(2);
-%             beta1(n,k) = gradY;
-% 
-%             gradX = (Y_X(3)-Y_X(1))/(sum(diff(range)));
-%             alpha0(n,k) = -gradX*x(2*n-1,k);
-%             alpha1(n,k) = gradX;
-% %             
             alpha1(n,k) = ((A(x(2*n-1,k)+epsilon)^AB_var(n)-(A(x(2*n-1,k)-epsilon))^AB_var(n))*x(2*n,k))/(2*epsilon) + ((u_opt(2*k-1,n)+u_opt(2*k,n))*(B(x(2*n-1,k)+epsilon)*AB_var(n)-(B(x(2*n-1,k)-epsilon)*AB_var(n))))/(2*epsilon);
             alpha0(n,k) = -(alpha1(n,k))*x(2*n-1,k);
 
@@ -648,7 +602,20 @@ for iter = 1:maxIter
             
             xboundup(k,n) = min(1,x(2*n-1,k)+epsilon);
             xbounddown(k,n) = max(0,x(2*n-1,k)-epsilon);
-       end
+        end
+        
+        % Update w_hat and errors
+        for i=1:ending
+            w_hat(i) = sum(u_opt(2*i-1,1:N))/N;
+            error_lambda(n,i) = (u_opt(2*i-1,n)-w_hat(i));
+            error_mu(i) = (y(1:N,i)'*u_opt(2*i,1:N)'+Rb*ones(1,N)*(u_opt(2*i,1:N).^2)');
+            error_nu(i) = ((y(1:N,i)'*u_opt(2*i-1,1:N)')-P(i));       
+        end
+
+        % Save errors
+        error_lambda_saved((N)*(iter-1)+n,:) = error_lambda(n,:);
+        mu_error_saved((N)*(iter-1)+n,:) = error_mu;
+        nu_error_saved((N)*(iter-1)+n,:) = error_nu;
         
         %% Save  
         % Save multipliers
@@ -668,73 +635,29 @@ for iter = 1:maxIter
         error_lambda_saved((N)*(iter-1)+n,:) = error_lambda(n,:);
         mu_error_saved((N)*(iter-1)+n,:) = error_mu;
         nu_error_saved((N)*(iter-1)+n,:) = error_nu;
-        
-        %     critical_saved(:,N*iter-(N-1):N*iter) = critical;
-        xboundup_saved(:,N*iter-(N-1):N*iter) = xboundup;
-        xbounddown_saved(:,N*iter-(N-1):N*iter) = xbounddown;
 
         %% Save u_opt
         u_opt_saved(:,N*iter-(N-1):N*iter) = u_opt;
-
-        % New stepsizes
-%         if iter>1
-%             for i=1:ending
-%                 s_k = lambda_saved((N)*(iter-1)+n,i)-lambda_saved((N)*(iter-2)+n,i);
-%                 y_k = error_lambda_saved((N)*(iter-1)+n,i)-error_lambda_saved((N)*(iter-2)+n,i);
-%                 gamma_lambda(n,i) = (s_k)^2/(s_k*y_k);
-%                 s_k = mu_saved((N)*(iter-1)+n,i)-mu_saved((N)*(iter-2)+n,i);
-%                 y_k = error_mu_saved((N)*(iter-1)+n,i)-error_mu_saved((N)*(iter-2)+n,i);
-%                 gamma_mu(i) = (s_k)^2/(s_k*y_k);
-%                 s_k = nu_saved((N)*(iter-1)+n,i)-nu_saved((N)*(iter-2)+n,i);
-%                 y_k = error_nu_saved((N)*(iter-1)+n,i)-error_nu_saved((N)*(iter-2)+n,i);
-%                 gamma_nu(i) = (s_k)^2/(s_k*y_k);
-%             end
-%         end
-        %% Merit function
-        y_merit = y(n,:);
-        if iter>1
-            Merit = sum(error_mu(error_mu>0))+sum(error_nu(error_nu>0));%+10*sum(y_merit(y_merit==2.6));
-%             Merit_mu = sum(error_mu(error_mu>0));
-%             Merit_nu = sum(error_nu(error_nu>0));
-            
-            cons = ceil(iter/9);
-            if Merit_end(n) > Merit || in_cyc>cons
-                gain(n) = gain(n)*1.3;
-                OK = 1;
-            elseif Merit_end(n) <= Merit
-                OK = 0;
-                gain(n) = gain(n)/1.35;
-% OK = 1;
-            end
-
-        else
-            Merit = sum(error_mu(error_mu>0))+sum(error_nu(error_nu>0));%+10*sum(y_merit(y_merit==2.6));
-            OK=1;
-        end
-%         
         
-        gain_saved(iter,n) = gain(n);
-        
+        %% store multipliers
+        lambda_old = lambda(n,:);
+        mu_old = mu;
+        nu_old = nu;
         
         %% Update lagrange multipliers
         for i=1:ending
-            lambda(n,i) = lambda(n,i) + gamma_lambda.*error_lambda(n,i);
-%             gain_mu(n,i) = (sum(mu_error_saved(n:N:(N-1)*iter+n,i)>0));
-%             gain_nu(n,i) = (sum(nu_error_saved(n:N:(N-1)*iter+n,i)>0));
-%             mu(i) = max([1e-6,mu(i)+gamma_mu*(sum(mu_error_saved(n:N:(N-1)*iter+n,1:min(10,i))>0)).*error_mu(i)]);
-%             nu(i) = max([1e-6,nu(i)+gamma_nu*(sum(mu_error_saved(n:N:(N-1)*iter+n,1:min(10,i))>0)).*error_nu(i)]);              
-            mu(i) = max([1e-6,mu(i)+gain(n)*gamma_mu.*error_mu(i)]);
-            nu(i) = max([1e-6,nu(i)+gain(n)*gamma_nu.*error_nu(i)]);
+            lambda(n,i) = lambda(n,i) + gamma_lambda.*error_lambda(n,i);          
+            mu(i) = max([1e-6,mu(i)+gamma_d.*error_mu(i)]);
+            nu(i) = max([1e-6,nu(i)+gamma_d.*error_nu(i)]);
         end 
-         
-        end
-       scatter(iter,sum(error_mu(error_mu>0))+sum(error_nu(error_nu>0)))
-        pause(0.01)
-        Merit_end(n) = Merit;
-    end
-    
-     p(iter+1,:) = (error_mu+error_nu);
-        d(iter+1,:) = (mu.*(y(n,:).*u_opt(2:2:end,n)'+Rb*(u_opt(2:2:end,n).^2)')+ nu.*((y(n,:).*u_opt(1:2:end,n)')));
+%         p(iter+1,:) = error_mu+error_nu+sum(error_lambda);
+%         d(iter+1,:) = lambda(n,:).*error_lambda(n,:) + (gamma_lambda/2)*error_lambda(n,:).^2 + mu.*(y(n,:).*u_opt(2:2:end,n)'+Rb*(u_opt(2:2:end,n).^2)')+ nu.*((y(n,:).*u_opt(1:2:end,n)'));
+        
+%         p(iter+1,:) = (error_mu+error_nu);
+%         d(iter+1,:) = (mu.*error_mu+ nu.*error_nu);
+
+        p(iter+1,:) = (U0(:,n)-u_opt(:,n))'/gamma_p - (mu_old-mu)/2 - (nu_old-nu)/2;
+        d(iter+1,:) = (mu_old-mu)/(2*gamma_d) + (nu_old-nu)/(2*gamma_p) - (U0(:,n)-u_opt(:,n))';
         
         for i=1:ending
             p_mult(2*i-1:2*i) = [1 1]*p(iter+1,i);
@@ -742,7 +665,27 @@ for iter = 1:maxIter
         end
         
         R(iter+1) = (p(iter+1,:)*p(iter+1,:)')/(d(iter+1,:)*d(iter+1,:)');
-    
+        w_p(iter+1) = ((U0(:,n)-u_opt(:,n))'*p_mult')/(((U0(:,n)-u_opt(:,n))'*(U0(:,n)-u_opt(:,n)))*(p_mult*p_mult'));
+        w_d(iter+1) = ((nu_old-nu+(mu_old-mu))*d_mult')/((nu_old-nu+(mu_old-mu))*(nu_old-nu+(mu_old-mu))'*(d_mult*d_mult'));
+        if w_p(iter+1)>ce
+            gamma_p = betaa*gamma_p;
+        elseif w_p(iter+1)<0
+            gamma_p = xsi*gamma_p;
+        end
+        if w_d(iter+1)>ce
+            gamma_d = betaa*gamma_d;
+        elseif w_d(iter+1)<0 
+            gamma_d = xsi*gamma_d;
+        end
+        
+        gamma_p = gamma_p*(R(iter+1))^rho;
+        gamma_d = gamma_d*(R(iter+1))^-rho;
+        
+        gamma_p_stored(iter) = gamma_p;
+        gamma_d_stored(iter) = gamma_d;
+        scatter(iter,sum(error_mu(error_mu>0))+sum(error_nu(error_nu>0)))
+        pause(0.0001)
+    end
 
     %% x and y
         x_saved((2*N*iter-(2*N-1)):(2*N*iter),:) = x;
